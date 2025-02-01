@@ -1,6 +1,6 @@
 {
   "name": "hono-swr-cache",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Hono Stale-While-Revalidate Cache Middleware",
   "type": "module",
   "module": "dist/index.js",
