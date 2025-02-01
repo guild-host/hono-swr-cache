@@ -263,6 +263,59 @@ describe("swrCache Middleware", () => {
         );
       });
     });
+
+    describe("keyGenerator option", () => {
+      it("uses the keyGenerator result as the cache key", async () => {
+        const app = new Hono();
+
+        app.use(
+          "*",
+          swrCache({
+            cacheName: "default",
+            keyGenerator: async (c) => `${c.req.url}/123456`,
+          })
+        );
+        app.get("/uncached", (c) => c.text("uncached"));
+
+        const res = await app.fetch(
+          new Request("http://localhost/uncached"),
+          undefined,
+          ctx
+        );
+
+        expect(cacheMatch).toHaveBeenCalledWith(
+          "http://localhost/uncached/123456"
+        );
+        expect(cachePut).toHaveBeenCalledWith(
+          "http://localhost/uncached/123456",
+          expect.any(Response)
+        );
+      });
+
+      it("defaults to the request's url if no keyGenerator is passed", async () => {
+        const app = new Hono();
+
+        app.use(
+          "*",
+          swrCache({
+            cacheName: "default",
+          })
+        );
+        app.get("/uncached", (c) => c.text("uncached"));
+
+        const res = await app.fetch(
+          new Request("http://localhost/uncached"),
+          undefined,
+          ctx
+        );
+
+        expect(cacheMatch).toHaveBeenCalledWith("http://localhost/uncached");
+        expect(cachePut).toHaveBeenCalledWith(
+          "http://localhost/uncached",
+          expect.any(Response)
+        );
+      });
+    });
   });
 
   describe("cache hit", () => {

@@ -15,6 +15,7 @@ export const swrCache = ({
   wait,
   cacheControl,
   vary,
+  keyGenerator,
 }: SwrCacheOptions): MiddlewareHandler => {
   if (!globalThis.caches) {
     console.error(
@@ -83,7 +84,9 @@ export const swrCache = ({
         ? await globalThis.caches.open(cacheName)
         : await globalThis.caches.open(await cacheName(c));
 
-    const response = await cache.match(c.req.url);
+    const key = keyGenerator ? await keyGenerator(c) : c.req.url;
+
+    const response = await cache.match(key);
 
     if (response) {
       return new Response(response.body, response);
@@ -102,7 +105,7 @@ export const swrCache = ({
     if (wait) {
       await cache.put(c.req.url, cacheableResponse);
     } else {
-      c.executionCtx.waitUntil(cache.put(c.req.url, cacheableResponse));
+      c.executionCtx.waitUntil(cache.put(key, cacheableResponse));
     }
   });
 };
