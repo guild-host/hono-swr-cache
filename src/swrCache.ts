@@ -10,13 +10,41 @@ interface SwrCacheOptions {
   keyGenerator?: (c: Context) => Promise<string> | string;
 }
 
-export const swrCache = ({ cacheName }: SwrCacheOptions): MiddlewareHandler => {
+export const swrCache = ({
+  cacheName,
+  wait,
+  cacheControl,
+}: SwrCacheOptions): MiddlewareHandler => {
   if (!globalThis.caches) {
     console.error(
       "SWR Cache Middleware requires globalThis.caches to be available"
     );
     return createMiddleware(async (c, next) => await next());
   }
+
+  const cacheControlDirectives = cacheControl
+    ?.split(",")
+    .map((d) => d.trim().toLowerCase());
+
+  const addHeaders = (c: Context) => {
+    if (cacheControlDirectives) {
+      const existingDirectives =
+        c.res.headers
+          .get("cache-control")
+          ?.split(",")
+          .map((d) => d.trim().split("=", 1)[0]) ?? [];
+
+      for (const directive of cacheControlDirectives) {
+        const [name, value] = directive.trim().split("=", 2);
+
+        if (!existingDirectives.includes(name)) {
+          c.header("cache-control", `${name}${value ? `=${value}` : ""}`, {
+            append: true,
+          });
+        }
+      }
+    }
+  };
 
   return createMiddleware(async (c, next) => {
     const cache =
@@ -36,8 +64,14 @@ export const swrCache = ({ cacheName }: SwrCacheOptions): MiddlewareHandler => {
       return;
     }
 
+    addHeaders(c);
+
     const cacheableResponse = c.res.clone();
 
-    c.executionCtx.waitUntil(cache.put(c.req.url, cacheableResponse));
+    if (wait) {
+      await cache.put(c.req.url, cacheableResponse);
+    } else {
+      c.executionCtx.waitUntil(cache.put(c.req.url, cacheableResponse));
+    }
   });
 };

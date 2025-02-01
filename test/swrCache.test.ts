@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { ExecutionContext } from "hono";
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { Mock } from "vitest";
 import { swrCache } from "../src/swrCache.js";
 
 class Context implements ExecutionContext {
@@ -15,21 +16,30 @@ class Context implements ExecutionContext {
 const ctx = new Context();
 
 describe("swrCache Middleware", () => {
+  let cacheOpen: Mock;
+  let cacheMatch: Mock;
+  let cachePut: Mock;
+
+  beforeEach(() => {
+    cacheMatch = vi.fn().mockImplementation(async () => undefined);
+    cachePut = vi.fn().mockImplementation(async () => undefined);
+
+    cacheOpen = vi.fn().mockImplementation(async () => ({
+      match: cacheMatch,
+      put: cachePut,
+    }));
+
+    vi.stubGlobal("caches", {
+      open: cacheOpen,
+    });
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
   describe("cache miss", () => {
-    it("returns the original response", async () => {
-      const cachePut = vi.fn();
-
-      vi.stubGlobal("caches", {
-        open: async () => ({
-          match: () => undefined,
-          put: cachePut,
-        }),
-      });
-
+    it("returns and caches the original response", async () => {
       const app = new Hono();
 
       app.use("*", swrCache({ cacheName: "default" }));
@@ -70,15 +80,6 @@ describe("swrCache Middleware", () => {
     });
 
     it("does not cache non-200 responses", async () => {
-      const cachePut = vi.fn();
-
-      vi.stubGlobal("caches", {
-        open: async () => ({
-          match: () => undefined,
-          put: cachePut,
-        }),
-      });
-
       const app = new Hono();
 
       app.use("*", swrCache({ cacheName: "default" }));
@@ -93,15 +94,6 @@ describe("swrCache Middleware", () => {
     });
 
     it('accepts a function for "cacheName"', async () => {
-      const cacheOpen = vi.fn().mockImplementation(async () => ({
-        match: () => undefined,
-        put: () => undefined,
-      }));
-
-      vi.stubGlobal("caches", {
-        open: cacheOpen,
-      });
-
       const app = new Hono();
 
       app.use("*", swrCache({ cacheName: (c) => c.req.path }));
@@ -116,13 +108,84 @@ describe("swrCache Middleware", () => {
       expect(await res.text()).toBe("uncached");
       expect(cacheOpen).toHaveBeenCalledWith("/uncached");
     });
+
+    it("waits if wait: true", async () => {
+      const app = new Hono();
+
+      app.use("*", swrCache({ cacheName: "default", wait: true }));
+      app.get("/uncached", (c) => c.text("uncached"));
+
+      const res = await app.fetch(
+        new Request("http://localhost/uncached"),
+        undefined,
+        ctx
+      );
+
+      expect(cachePut).toHaveBeenCalledWith(
+        "http://localhost/uncached",
+        expect.any(Response)
+      );
+
+      expect(await res.text()).toBe("uncached");
+    });
+
+    describe("cacheControl option", () => {
+      it("sets the response's Cache-Control", async () => {
+        const app = new Hono();
+
+        app.use(
+          "*",
+          swrCache({
+            cacheName: "default",
+            cacheControl: "public,max-age=60,s-maxage=120",
+          })
+        );
+        app.get("/uncached", (c) => c.text("uncached"));
+
+        const res = await app.fetch(
+          new Request("http://localhost/uncached"),
+          undefined,
+          ctx
+        );
+
+        expect(res.headers.get("Cache-Control")).toBe(
+          "public, max-age=60, s-maxage=120"
+        );
+        expect(await res.text()).toBe("uncached");
+      });
+
+      it("adds to the response's existing Cache-Control", async () => {
+        const app = new Hono();
+
+        app.use(
+          "*",
+          swrCache({
+            cacheName: "default",
+            cacheControl: "public,max-age=60,s-maxage=120",
+          })
+        );
+        app.get("/uncached", (c) => {
+          c.res.headers.set("Cache-Control", "max-age=0");
+          return c.text("uncached");
+        });
+
+        const res = await app.fetch(
+          new Request("http://localhost/uncached"),
+          undefined,
+          ctx
+        );
+
+        expect(res.headers.get("Cache-Control")).toBe(
+          "max-age=0, public, s-maxage=120"
+        );
+        expect(await res.text()).toBe("uncached");
+      });
+    });
   });
 
   describe("cache hit", () => {
     it("returns the cached response", async () => {
-      vi.stubGlobal("caches", {
-        open: async () => ({ match: async () => new Response("cached") }),
-      });
+      cacheMatch.mockImplementation(async () => new Response("cached"));
 
       const app = new Hono();
 
@@ -137,13 +200,9 @@ describe("swrCache Middleware", () => {
     });
 
     it("returns different responses for different urls", async () => {
-      vi.stubGlobal("caches", {
-        open: async () => ({
-          match: async (key: string) => {
-            if (key === "http://localhost/url1") return new Response("url1");
-            if (key === "http://localhost/url2") return new Response("url2");
-          },
-        }),
+      cacheMatch.mockImplementation(async (key: string) => {
+        if (key === "http://localhost/url1") return new Response("url1");
+        if (key === "http://localhost/url2") return new Response("url2");
       });
 
       const app = new Hono();
