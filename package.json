@@ -1,5 +1,5 @@
 {
-  "name": "hono-swr-cache",
+  "name": "@guild-host/hono-swr-cache",
   "version": "0.1.0",
   "description": "Hono Stale-While-Revalidate Cache Middleware",
   "type": "module",

@@ -325,13 +325,18 @@ describe("swrCache Middleware", () => {
       const app = new Hono();
 
       app.use("*", swrCache({ cacheName: "default" }));
-      app.get("/uncached", (c) => c.text("uncached"));
+
+      const responseFn = vi.fn();
+
+      app.get("/uncached", responseFn);
 
       const res = await app.request("http://localhost/uncached");
 
       expect(res).not.toBeNull();
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("cached");
+
+      expect(responseFn).not.toHaveBeenCalled();
     });
 
     it("returns different responses for different urls", async () => {
@@ -343,14 +348,62 @@ describe("swrCache Middleware", () => {
       const app = new Hono();
 
       app.use("*", swrCache({ cacheName: "default" }));
-      app.get("/url1", (c) => c.text("url1"));
-      app.get("/url1", (c) => c.text("url2"));
 
-      const res1 = await app.request("http://localhost/url1");
-      const res2 = await app.request("http://localhost/url2");
+      const responseFn = vi.fn();
+
+      app.get("/url1", responseFn);
+      app.get("/url1", responseFn);
+
+      const res1 = await app.fetch(
+        new Request("http://localhost/url1"),
+        undefined,
+        ctx
+      );
+      const res2 = await app.fetch(
+        new Request("http://localhost/url2"),
+        undefined,
+        ctx
+      );
 
       expect(await res1.text()).toBe("url1");
       expect(await res2.text()).toBe("url2");
+
+      expect(responseFn).not.toHaveBeenCalled();
+    });
+
+    describe("stale-while-revalidate", () => {
+      it("returns the cached response and revalidates in the background", async () => {
+        cacheMatch.mockImplementation(
+          async () =>
+            new Response("cached", {
+              headers: {
+                "x-edge-cache-stale-at": "0",
+              },
+            })
+        );
+
+        const app = new Hono();
+
+        app.use("*", swrCache({ cacheName: "default" }));
+
+        const responseFn = vi
+          .fn()
+          .mockImplementation(async (c) => c.text("revalidated"));
+
+        app.get("/uncached", responseFn);
+
+        const res = await app.fetch(
+          new Request("http://localhost/uncached", { headers: {} }),
+          undefined,
+          ctx
+        );
+
+        expect(res).not.toBeNull();
+        expect(res.status).toBe(200);
+        expect(await res.text()).toBe("cached");
+
+        expect(responseFn).toHaveBeenCalled();
+      });
     });
   });
 

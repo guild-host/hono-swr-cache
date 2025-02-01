@@ -1,4 +1,4 @@
-# hono-swr-cache
+# @guild-host/hono-swr-cache
 
 This library is meant to be a drop-in replacement for Hono's Cache Middleware, accepting the same options and providing additional `stale-while-revalidate` support (`stale-if-error` coming soon!)
 

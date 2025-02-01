@@ -1,13 +1,22 @@
 import { createMiddleware } from "hono/factory";
 import type { Context, MiddlewareHandler } from "hono";
 
-// Taken directly from https://github.com/honojs/hono/blob/b2affb84f18746b487a2e02f0b1cd18e2bd8e5f5/src/middleware/cache/index.ts#L34-L40
 interface SwrCacheOptions {
+  // Taken directly from https://github.com/honojs/hono/blob/b2affb84f18746b487a2e02f0b1cd18e2bd8e5f5/src/middleware/cache/index.ts#L34-L40
   cacheName: string | ((c: Context) => Promise<string> | string);
   wait?: boolean;
   cacheControl?: string;
   vary?: string | string[];
   keyGenerator?: (c: Context) => Promise<string> | string;
+
+  // additional hono-swr-cache specific options
+
+  swr?: {
+    staleAtHeaderName?: string;
+    statusHeaderName?: string;
+    clientCacheControlHeaderName?: string;
+    originCacheControlHeaderName?: string;
+  };
 }
 
 export const swrCache = ({
@@ -89,7 +98,11 @@ export const swrCache = ({
     const response = await cache.match(key);
 
     if (response) {
-      return new Response(response.body, response);
+      c.res = new Response(response.body, response);
+
+      if (!shouldRevalidate(response)) {
+        return;
+      }
     }
 
     await next();
@@ -108,4 +121,15 @@ export const swrCache = ({
       c.executionCtx.waitUntil(cache.put(key, cacheableResponse));
     }
   });
+};
+
+const shouldRevalidate = (res: Response) => {
+  // if we don't have the SWR headers set by this middleware, don't revalidate
+  const staleAt = res.headers.get("x-edge-cache-stale-at");
+
+  if (!staleAt) {
+    return false;
+  }
+
+  return Date.now() > new Date(parseInt(staleAt, 10)).getTime();
 };
