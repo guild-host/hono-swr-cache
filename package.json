@@ -45,6 +45,7 @@
   ],
   "author": "Taz Singh",
   "devDependencies": {
+    "@vitest/coverage-v8": "3.0.4",
     "hono": "^4.6.20",
     "tsup": "^8.3.6",
     "vitest": "^3.0.4"

@@ -1,6 +1,7 @@
 import { createMiddleware } from "hono/factory";
-import type { Context } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 
+// Taken directly from https://github.com/honojs/hono/blob/b2affb84f18746b487a2e02f0b1cd18e2bd8e5f5/src/middleware/cache/index.ts#L34-L40
 interface SwrCacheOptions {
   cacheName: string | ((c: Context) => Promise<string> | string);
   wait?: boolean;
@@ -9,7 +10,7 @@ interface SwrCacheOptions {
   keyGenerator?: (c: Context) => Promise<string> | string;
 }
 
-export const swrCache = ({ cacheName }: SwrCacheOptions) => {
+export const swrCache = ({ cacheName }: SwrCacheOptions): MiddlewareHandler => {
   if (!globalThis.caches) {
     console.error(
       "SWR Cache Middleware requires globalThis.caches to be available"
