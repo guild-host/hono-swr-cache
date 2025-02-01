@@ -78,6 +78,13 @@ export const swrCache = ({
             append: true,
           });
         }
+
+        if (name === "stale-while-revalidate") {
+          c.header(
+            swr.staleAtHeaderName!,
+            (Date.now() + parseInt(value, 10)).toString()
+          );
+        }
       }
     }
 
@@ -136,20 +143,26 @@ export const swrCache = ({
       c.res.headers.set(swr.statusHeaderName!, SWRStatus.MISS);
     }
 
-    await next();
+    const processNext = new Promise<void>(async (resolve) => {
+      await next();
 
-    if (!c.res.ok) {
-      return;
-    }
+      if (!c.res.ok) {
+        return;
+      }
 
-    addHeaders(c);
+      addHeaders(c);
 
-    const cacheableResponse = c.res.clone();
+      const cacheableResponse = c.res.clone();
+
+      await cache.put(key, cacheableResponse);
+
+      resolve();
+    });
 
     if (wait) {
-      await cache.put(c.req.url, cacheableResponse);
+      await processNext;
     } else {
-      c.executionCtx.waitUntil(cache.put(key, cacheableResponse));
+      c.executionCtx.waitUntil(processNext);
     }
   });
 };

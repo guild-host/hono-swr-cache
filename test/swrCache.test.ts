@@ -87,7 +87,11 @@ describe("swrCache Middleware", () => {
       app.use("*", swrCache({ cacheName: "default" }));
       app.get("/error", (c) => c.text("error", 500));
 
-      const res = await app.request("http://localhost/error");
+      const res = await app.fetch(
+        new Request("http://localhost/error"),
+        undefined,
+        ctx
+      );
 
       expect(res.ok).toBe(false);
       expect(res.headers.get("x-edge-cache-status")).toBe("MISS");
@@ -376,7 +380,7 @@ describe("swrCache Middleware", () => {
     });
 
     describe("stale-while-revalidate", () => {
-      it("returns the cached response and revalidates in the background", async () => {
+      it.only("returns the cached response and revalidates in the background for the next request", async () => {
         cacheMatch.mockImplementation(
           async () =>
             new Response("cached", {
@@ -388,7 +392,13 @@ describe("swrCache Middleware", () => {
 
         const app = new Hono();
 
-        app.use("*", swrCache({ cacheName: "default" }));
+        app.use(
+          "*",
+          swrCache({
+            cacheName: "default",
+            cacheControl: "max-age=60, stale-while-revalidate=120",
+          })
+        );
 
         const responseFn = vi
           .fn()
@@ -397,17 +407,32 @@ describe("swrCache Middleware", () => {
         app.get("/uncached", responseFn);
 
         const res = await app.fetch(
-          new Request("http://localhost/uncached", { headers: {} }),
+          new Request("http://localhost/uncached"),
           undefined,
           ctx
         );
 
-        expect(res).not.toBeNull();
         expect(res.status).toBe(200);
         expect(res.headers.get("x-edge-cache-status")).toBe("REVALIDATING");
         expect(await res.text()).toBe("cached");
 
         expect(responseFn).toHaveBeenCalled();
+        expect(cachePut).toHaveBeenCalledWith(
+          "http://localhost/uncached",
+          expect.any(Response)
+        );
+
+        cacheMatch.mockImplementation(async () => cachePut.mock.calls[0][1]);
+
+        const res2 = await app.fetch(
+          new Request("http://localhost/uncached"),
+          undefined,
+          ctx
+        );
+
+        expect(res2.status).toBe(200);
+        expect(res2.headers.get("x-edge-cache-status")).toBe("HIT");
+        expect(await res2.text()).toBe("revalidated");
       });
     });
   });
