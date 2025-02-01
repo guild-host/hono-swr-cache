@@ -52,6 +52,7 @@ describe("swrCache Middleware", () => {
         ctx
       );
 
+      expect(res1.headers.get("x-edge-cache-status")).toBe("MISS");
       expect(await res1.text()).toBe("uncached1");
       expect(cachePut).toHaveBeenCalledWith(
         "http://localhost/uncached1",
@@ -68,6 +69,7 @@ describe("swrCache Middleware", () => {
         ctx
       );
 
+      expect(res2.headers.get("x-edge-cache-status")).toBe("MISS");
       expect(await res2.text()).toBe("uncached2");
       expect(cachePut).toHaveBeenCalledWith(
         "http://localhost/uncached2",
@@ -88,6 +90,7 @@ describe("swrCache Middleware", () => {
       const res = await app.request("http://localhost/error");
 
       expect(res.ok).toBe(false);
+      expect(res.headers.get("x-edge-cache-status")).toBe("MISS");
       expect(await res.text()).toBe("error");
 
       expect(cachePut).not.toHaveBeenCalled();
@@ -277,7 +280,7 @@ describe("swrCache Middleware", () => {
         );
         app.get("/uncached", (c) => c.text("uncached"));
 
-        const res = await app.fetch(
+        await app.fetch(
           new Request("http://localhost/uncached"),
           undefined,
           ctx
@@ -303,7 +306,7 @@ describe("swrCache Middleware", () => {
         );
         app.get("/uncached", (c) => c.text("uncached"));
 
-        const res = await app.fetch(
+        await app.fetch(
           new Request("http://localhost/uncached"),
           undefined,
           ctx
@@ -334,6 +337,7 @@ describe("swrCache Middleware", () => {
 
       expect(res).not.toBeNull();
       expect(res.status).toBe(200);
+      expect(res.headers.get("x-edge-cache-status")).toBe("HIT");
       expect(await res.text()).toBe("cached");
 
       expect(responseFn).not.toHaveBeenCalled();
@@ -400,6 +404,7 @@ describe("swrCache Middleware", () => {
 
         expect(res).not.toBeNull();
         expect(res.status).toBe(200);
+        expect(res.headers.get("x-edge-cache-status")).toBe("REVALIDATING");
         expect(await res.text()).toBe("cached");
 
         expect(responseFn).toHaveBeenCalled();

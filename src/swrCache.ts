@@ -19,12 +19,19 @@ interface SwrCacheOptions {
   };
 }
 
+enum SWRStatus {
+  HIT = "HIT",
+  MISS = "MISS",
+  REVALIDATING = "REVALIDATING",
+}
+
 export const swrCache = ({
   cacheName,
   wait,
   cacheControl,
   vary,
   keyGenerator,
+  swr = {},
 }: SwrCacheOptions): MiddlewareHandler => {
   if (!globalThis.caches) {
     console.error(
@@ -32,6 +39,14 @@ export const swrCache = ({
     );
     return createMiddleware(async (c, next) => await next());
   }
+
+  swr = {
+    staleAtHeaderName: "x-edge-cache-stale-at",
+    statusHeaderName: "x-edge-cache-status",
+    clientCacheControlHeaderName: "x-client-cache-control",
+    originCacheControlHeaderName: "x-edge-cache-control",
+    ...swr,
+  };
 
   const cacheControlDirectives = cacheControl
     ?.split(",")
@@ -87,6 +102,17 @@ export const swrCache = ({
     }
   };
 
+  const shouldRevalidate = (res: Response) => {
+    const staleAt = res.headers.get(swr.staleAtHeaderName!);
+
+    // if we don't have the SWR headers set by this middleware, don't revalidate
+    if (!staleAt) {
+      return false;
+    }
+
+    return Date.now() > new Date(parseInt(staleAt, 10)).getTime();
+  };
+
   return createMiddleware(async (c, next) => {
     const cache =
       typeof cacheName === "string"
@@ -101,8 +127,13 @@ export const swrCache = ({
       c.res = new Response(response.body, response);
 
       if (!shouldRevalidate(response)) {
+        c.res.headers.set(swr.statusHeaderName!, SWRStatus.HIT);
         return;
       }
+
+      c.res.headers.set(swr.statusHeaderName!, SWRStatus.REVALIDATING);
+    } else {
+      c.res.headers.set(swr.statusHeaderName!, SWRStatus.MISS);
     }
 
     await next();
@@ -121,15 +152,4 @@ export const swrCache = ({
       c.executionCtx.waitUntil(cache.put(key, cacheableResponse));
     }
   });
-};
-
-const shouldRevalidate = (res: Response) => {
-  // if we don't have the SWR headers set by this middleware, don't revalidate
-  const staleAt = res.headers.get("x-edge-cache-stale-at");
-
-  if (!staleAt) {
-    return false;
-  }
-
-  return Date.now() > new Date(parseInt(staleAt, 10)).getTime();
 };
