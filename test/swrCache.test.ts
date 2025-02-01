@@ -380,7 +380,7 @@ describe("swrCache Middleware", () => {
     });
 
     describe("stale-while-revalidate", () => {
-      it.only("returns the cached response and revalidates in the background for the next request", async () => {
+      it("returns the cached response and revalidates in the background for the next request", async () => {
         cacheMatch.mockImplementation(
           async () =>
             new Response("cached", {
