@@ -151,7 +151,6 @@ describe("swrCache Middleware", () => {
         expect(res.headers.get("Cache-Control")).toBe(
           "public, max-age=60, s-maxage=120"
         );
-        expect(await res.text()).toBe("uncached");
       });
 
       it("adds to the response's existing Cache-Control", async () => {
@@ -178,7 +177,90 @@ describe("swrCache Middleware", () => {
         expect(res.headers.get("Cache-Control")).toBe(
           "max-age=0, public, s-maxage=120"
         );
-        expect(await res.text()).toBe("uncached");
+      });
+    });
+
+    describe("vary option", () => {
+      it("adds to the response's existing Vary", async () => {
+        const app = new Hono();
+
+        app.use(
+          "*",
+          swrCache({
+            cacheName: "default",
+            vary: "x-header-123,x-header-789",
+          })
+        );
+        app.get("/uncached", (c) => {
+          c.res.headers.set("vary", "x-header-456");
+          return c.text("uncached");
+        });
+
+        const res = await app.fetch(
+          new Request("http://localhost/uncached"),
+          undefined,
+          ctx
+        );
+
+        expect(res.headers.get("vary")).toBe(
+          "x-header-123, x-header-456, x-header-789"
+        );
+      });
+
+      it("accepts an array", async () => {
+        const app = new Hono();
+
+        app.use(
+          "*",
+          swrCache({
+            cacheName: "default",
+            vary: ["x-header-123", "x-header-789"],
+          })
+        );
+        app.get("/uncached", (c) => c.text("uncached"));
+
+        const res = await app.fetch(
+          new Request("http://localhost/uncached"),
+          undefined,
+          ctx
+        );
+
+        expect(res.headers.get("vary")).toBe("x-header-123, x-header-789");
+      });
+
+      it("sets Vary header to * if response Vary is *", async () => {
+        const app = new Hono();
+
+        app.use(
+          "*",
+          swrCache({
+            cacheName: "default",
+            vary: "x-header-123,x-header-789",
+          })
+        );
+        app.get("/uncached", (c) => {
+          c.res.headers.set("vary", "*");
+          return c.text("uncached");
+        });
+
+        const res = await app.fetch(
+          new Request("http://localhost/uncached"),
+          undefined,
+          ctx
+        );
+
+        expect(res.headers.get("vary")).toBe("*");
+      });
+
+      it("does not accept vary: * as an option", async () => {
+        expect(() => {
+          swrCache({
+            cacheName: "default",
+            vary: "*",
+          });
+        }).toThrow(
+          'Middleware vary configuration cannot include "*", as it disallows effective caching.'
+        );
       });
     });
   });

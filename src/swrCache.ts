@@ -14,6 +14,7 @@ export const swrCache = ({
   cacheName,
   wait,
   cacheControl,
+  vary,
 }: SwrCacheOptions): MiddlewareHandler => {
   if (!globalThis.caches) {
     console.error(
@@ -25,6 +26,16 @@ export const swrCache = ({
   const cacheControlDirectives = cacheControl
     ?.split(",")
     .map((d) => d.trim().toLowerCase());
+
+  const varyDirectives = Array.isArray(vary)
+    ? vary
+    : vary?.split(",").map((d) => d.trim());
+
+  if (varyDirectives?.includes("*")) {
+    throw new Error(
+      'Middleware vary configuration cannot include "*", as it disallows effective caching.'
+    );
+  }
 
   const addHeaders = (c: Context) => {
     if (cacheControlDirectives) {
@@ -42,6 +53,26 @@ export const swrCache = ({
             append: true,
           });
         }
+      }
+    }
+
+    if (varyDirectives) {
+      const existingVary =
+        c.res.headers
+          .get("vary")
+          ?.split(",")
+          .map((d) => d.trim()) ?? [];
+
+      const vary = Array.from(
+        new Set(
+          [...existingVary, ...varyDirectives].map((d) => d.toLowerCase())
+        )
+      ).sort();
+
+      if (vary.includes("*")) {
+        c.header("vary", "*");
+      } else {
+        c.header("vary", vary.join(", "));
       }
     }
   };
