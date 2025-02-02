@@ -20,7 +20,7 @@ The nature of a `stale-while-revalidate` workflow is that you return 1 response 
 
 There are some hacky workarounds within Hono, but nothing that provides me with confidence that any of these hacks are a reliable path forward.
 
-Thus, this repo serves as an example of what I'd like to accomplish, with a test suite that has a failing test describing my desired behaviour.
+Thus, this repo serves as an example of what I'd like to accomplish, with a test suite that has a failing test describing my desired behaviour. Check out the Actions in this repo for an example of a test run.
 
 ## Workaround
 
